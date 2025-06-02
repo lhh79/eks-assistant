@@ -37,11 +37,33 @@ def init_aws_clients():
         
         return {
             'eks': session.client('eks', region_name=region),
-            'bedrock_agent_runtime': session.client('bedrock-agent-runtime', region_name='us-west-2')
+            'bedrock_runtime': session.client('bedrock-runtime', region_name='us-west-2'),
+            'bedrock': session.client('bedrock', region_name='us-west-2')
         }
     except (NoCredentialsError, ClientError) as e:
         st.error(f"AWS 서비스 초기화 중 오류가 발생했습니다: {e}")
         return None
+
+# 사용 가능한 Bedrock 모델 조회
+def get_available_models(bedrock_client):
+    """사용 가능한 Bedrock 모델 목록을 조회합니다."""
+    try:
+        response = bedrock_client.list_foundation_models()
+        models = []
+        
+        for model in response['modelSummaries']:
+            # 텍스트 생성이 가능한 모델만 필터링
+            if 'TEXT' in model.get('inputModalities', []) and 'TEXT' in model.get('outputModalities', []):
+                models.append({
+                    'modelId': model['modelId'],
+                    'modelName': model['modelName'],
+                    'providerName': model['providerName']
+                })
+        
+        return models
+    except ClientError as e:
+        st.error(f"Bedrock 모델 조회 중 오류가 발생했습니다: {e}")
+        return []
 
 # EKS 클러스터 정보 조회
 def get_eks_clusters(eks_client):
@@ -65,28 +87,68 @@ def get_eks_clusters(eks_client):
         st.error(f"EKS 클러스터 조회 중 오류가 발생했습니다: {e}")
         return []
 
-# Bedrock Agent 호출
-def invoke_bedrock_agent(bedrock_agent_runtime, agent_id, agent_alias_id, prompt):
-    """Bedrock Agent를 호출합니다."""
+# Bedrock 모델 호출
+def invoke_bedrock_model(bedrock_runtime, model_id, prompt, temperature=0.7, max_tokens=1000):
+    """Bedrock 모델을 직접 호출합니다."""
     try:
-        response = bedrock_agent_runtime.invoke_agent(
-            agentId=agent_id,
-            agentAliasId=agent_alias_id,
-            sessionId=f"session-{int(time.time())}",
-            inputText=prompt
+        if 'anthropic.claude' in model_id:
+            body = {
+                "anthropic_version": "bedrock-2023-05-31",
+                "max_tokens": max_tokens,
+                "temperature": temperature,
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": prompt
+                    }
+                ]
+            }
+        elif 'amazon.titan' in model_id:
+            body = {
+                "inputText": prompt,
+                "textGenerationConfig": {
+                    "maxTokenCount": max_tokens,
+                    "temperature": temperature,
+                    "topP": 0.9
+                }
+            }
+        elif 'meta.llama' in model_id:
+            body = {
+                "prompt": prompt,
+                "max_gen_len": max_tokens,
+                "temperature": temperature,
+                "top_p": 0.9
+            }
+        else:
+            # 기본 형식
+            body = {
+                "inputText": prompt,
+                "textGenerationConfig": {
+                    "maxTokenCount": max_tokens,
+                    "temperature": temperature
+                }
+            }
+        
+        response = bedrock_runtime.invoke_model(
+            modelId=model_id,
+            body=json.dumps(body),
+            contentType='application/json'
         )
         
-        # 스트리밍 응답 처리
-        result = ""
-        for event in response['completion']:
-            if 'chunk' in event:
-                chunk = event['chunk']
-                if 'bytes' in chunk:
-                    result += chunk['bytes'].decode('utf-8')
+        response_body = json.loads(response['body'].read())
         
-        return result
+        # 모델별 응답 파싱
+        if 'anthropic.claude' in model_id:
+            return response_body['content'][0]['text']
+        elif 'amazon.titan' in model_id:
+            return response_body['results'][0]['outputText']
+        elif 'meta.llama' in model_id:
+            return response_body['generation']
+        else:
+            return response_body.get('outputText', str(response_body))
+            
     except ClientError as e:
-        st.error(f"Bedrock Agent 호출 중 오류가 발생했습니다: {e}")
+        st.error(f"Bedrock 모델 호출 중 오류가 발생했습니다: {e}")
         return None
 
 # AWS 설정 초기화
@@ -105,21 +167,67 @@ with st.sidebar:
     # AWS 설정 섹션
     st.markdown("#### ⚙️ AWS 설정")
     
-    # Bedrock Agent 설정
-    with st.expander("🤖 Bedrock Agent 설정", expanded=True):
-        agent_id = st.text_input("Bedrock Agent ID", 
-                                value=st.session_state.get('agent_id', ''),
-                                help="Amazon Bedrock Agent의 ID를 입력하세요")
-        
-        agent_alias_id = st.text_input("Agent Alias ID", 
-                                      value=st.session_state.get('agent_alias_id', 'TSTALIASID'),
-                                      help="Agent의 Alias ID를 입력하세요")
-    
-    # 설정 저장
-    if st.button("💾 설정 저장", use_container_width=True):
-        st.session_state.agent_id = agent_id
-        st.session_state.agent_alias_id = agent_alias_id
-        st.success("✅ Bedrock Agent 설정이 저장되었습니다!")
+    # Bedrock 모델 설정
+    if aws_clients and 'bedrock' in aws_clients:
+        with st.expander("🤖 Bedrock 모델 설정", expanded=True):
+            # 사용 가능한 모델 목록 조회
+            if 'available_models' not in st.session_state:
+                with st.spinner("사용 가능한 모델을 조회하는 중..."):
+                    models = get_available_models(aws_clients['bedrock'])
+                    st.session_state.available_models = models
+            
+            models = st.session_state.get('available_models', [])
+            
+            if models:
+                model_options = [f"{model['providerName']} - {model['modelName']} ({model['modelId']})" for model in models]
+                model_ids = [model['modelId'] for model in models]
+                
+                selected_index = st.selectbox(
+                    "사용할 모델 선택",
+                    range(len(model_options)),
+                    format_func=lambda x: model_options[x],
+                    index=0,
+                    help="Bedrock에서 사용할 AI 모델을 선택하세요"
+                )
+                
+                selected_model_id = model_ids[selected_index]
+                
+                # 모델 파라미터 설정
+                col1, col2 = st.columns(2)
+                with col1:
+                    temperature = st.slider(
+                        "Temperature",
+                        min_value=0.0,
+                        max_value=1.0,
+                        value=0.7,
+                        step=0.1,
+                        help="창의성 조절 (0: 일관성, 1: 창의적)"
+                    )
+                
+                with col2:
+                    max_tokens = st.number_input(
+                        "Max Tokens",
+                        min_value=100,
+                        max_value=4000,
+                        value=1000,
+                        step=100,
+                        help="최대 응답 길이"
+                    )
+                
+                # 설정 저장
+                st.session_state.selected_model_id = selected_model_id
+                st.session_state.temperature = temperature
+                st.session_state.max_tokens = max_tokens
+                
+                st.success(f"✅ 선택된 모델: {models[selected_index]['modelName']}")
+            else:
+                st.warning("사용 가능한 모델이 없습니다.")
+                if st.button("🔄 모델 목록 새로고침"):
+                    if 'available_models' in st.session_state:
+                        del st.session_state.available_models
+                    st.rerun()
+    else:
+        st.warning("AWS Bedrock 서비스에 연결되지 않았습니다.")
     
     st.markdown("---")
     
@@ -275,13 +383,14 @@ col1, col2 = st.columns(2)
 
 with col1:
     if st.button("☁️ How do I create an EKS cluster?", use_container_width=True):
-        if aws_clients and st.session_state.get('agent_id'):
-            with st.spinner("Bedrock Agent에서 응답을 가져오는 중..."):
-                response = invoke_bedrock_agent(
-                    aws_clients['bedrock_agent_runtime'],
-                    st.session_state.agent_id,
-                    st.session_state.agent_alias_id,
-                    "How do I create an EKS cluster? Provide step-by-step instructions."
+        if aws_clients and st.session_state.get('selected_model_id'):
+            with st.spinner("Bedrock 모델에서 응답을 가져오는 중..."):
+                response = invoke_bedrock_model(
+                    aws_clients['bedrock_runtime'],
+                    st.session_state.selected_model_id,
+                    "How do I create an EKS cluster? Provide step-by-step instructions.",
+                    st.session_state.get('temperature', 0.7),
+                    st.session_state.get('max_tokens', 1000)
                 )
                 if response:
                     st.session_state.chat_history.append(("user", "How do I create an EKS cluster?"))
@@ -289,13 +398,14 @@ with col1:
                     st.rerun()
     
     if st.button("🔧 Common kubectl commands for EKS", use_container_width=True):
-        if aws_clients and st.session_state.get('agent_id'):
-            with st.spinner("Bedrock Agent에서 응답을 가져오는 중..."):
-                response = invoke_bedrock_agent(
-                    aws_clients['bedrock_agent_runtime'],
-                    st.session_state.agent_id,
-                    st.session_state.agent_alias_id,
-                    "What are the most common kubectl commands for managing EKS clusters?"
+        if aws_clients and st.session_state.get('selected_model_id'):
+            with st.spinner("Bedrock 모델에서 응답을 가져오는 중..."):
+                response = invoke_bedrock_model(
+                    aws_clients['bedrock_runtime'],
+                    st.session_state.selected_model_id,
+                    "What are the most common kubectl commands for managing EKS clusters?",
+                    st.session_state.get('temperature', 0.7),
+                    st.session_state.get('max_tokens', 1000)
                 )
                 if response:
                     st.session_state.chat_history.append(("user", "Common kubectl commands for EKS"))
@@ -311,13 +421,14 @@ with col2:
             st.rerun()
     
     if st.button("📈 How do I scale my EKS deployment?", use_container_width=True):
-        if aws_clients and st.session_state.get('agent_id'):
-            with st.spinner("Bedrock Agent에서 응답을 가져오는 중..."):
-                response = invoke_bedrock_agent(
-                    aws_clients['bedrock_agent_runtime'],
-                    st.session_state.agent_id,
-                    st.session_state.agent_alias_id,
-                    "How do I scale my EKS deployment? Include both horizontal and vertical scaling options."
+        if aws_clients and st.session_state.get('selected_model_id'):
+            with st.spinner("Bedrock 모델에서 응답을 가져오는 중..."):
+                response = invoke_bedrock_model(
+                    aws_clients['bedrock_runtime'],
+                    st.session_state.selected_model_id,
+                    "How do I scale my EKS deployment? Include both horizontal and vertical scaling options.",
+                    st.session_state.get('temperature', 0.7),
+                    st.session_state.get('max_tokens', 1000)
                 )
                 if response:
                     st.session_state.chat_history.append(("user", "How do I scale my EKS deployment?"))
@@ -326,13 +437,14 @@ with col2:
 
 # 추가 기능 카드
 if st.button("💾 How to connect RDS to my EKS cluster?", use_container_width=True):
-    if aws_clients and st.session_state.get('agent_id'):
-        with st.spinner("Bedrock Agent에서 응답을 가져오는 중..."):
-            response = invoke_bedrock_agent(
-                aws_clients['bedrock_agent_runtime'],
-                st.session_state.agent_id,
-                st.session_state.agent_alias_id,
-                "How do I connect RDS to my EKS cluster? Include security best practices."
+    if aws_clients and st.session_state.get('selected_model_id'):
+        with st.spinner("Bedrock 모델에서 응답을 가져오는 중..."):
+            response = invoke_bedrock_model(
+                aws_clients['bedrock_runtime'],
+                st.session_state.selected_model_id,
+                "How do I connect RDS to my EKS cluster? Include security best practices.",
+                st.session_state.get('temperature', 0.7),
+                st.session_state.get('max_tokens', 1000)
             )
             if response:
                 st.session_state.chat_history.append(("user", "How to connect RDS to my EKS cluster?"))
@@ -355,8 +467,8 @@ with col2:
 
 with col3:
     if st.button("📤", help="전송"):
-        if user_input and aws_clients and st.session_state.get('agent_id'):
-            with st.spinner("Bedrock Agent에서 응답을 가져오는 중..."):
+        if user_input and aws_clients and st.session_state.get('selected_model_id'):
+            with st.spinner("Bedrock 모델에서 응답을 가져오는 중..."):
                 # 선택된 클러스터 정보를 컨텍스트에 추가
                 context = ""
                 if st.session_state.selected_cluster:
@@ -364,19 +476,20 @@ with col3:
                     context = f"현재 선택된 EKS 클러스터: {cluster['name']} (상태: {cluster['status']}, 버전: {cluster['version']})\n\n"
                 
                 full_prompt = context + user_input
-                response = invoke_bedrock_agent(
-                    aws_clients['bedrock_agent_runtime'],
-                    st.session_state.agent_id,
-                    st.session_state.agent_alias_id,
-                    full_prompt
+                response = invoke_bedrock_model(
+                    aws_clients['bedrock_runtime'],
+                    st.session_state.selected_model_id,
+                    full_prompt,
+                    st.session_state.get('temperature', 0.7),
+                    st.session_state.get('max_tokens', 1000)
                 )
                 
                 if response:
                     st.session_state.chat_history.append(("user", user_input))
                     st.session_state.chat_history.append(("assistant", response))
                     st.rerun()
-        elif not st.session_state.get('agent_id'):
-            st.warning("Bedrock Agent ID를 먼저 설정해주세요.")
+        elif not st.session_state.get('selected_model_id'):
+            st.warning("Bedrock 모델을 먼저 선택해주세요.")
         elif user_input:
             st.error("AWS 서비스에 연결되지 않았습니다.")
 
