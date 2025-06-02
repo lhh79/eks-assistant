@@ -19,12 +19,12 @@ def init_aws_clients():
     """AWS 클라이언트들을 초기화합니다."""
     try:
         # 기본 리전 설정
-        region = 'ap-northeast-2'  # 서울 리전
+        region = 'us-west-2'  # 미국 서부 리전
         session = boto3.Session()
         return {
             'eks': session.client('eks', region_name=region),
-            'bedrock_agent_runtime': session.client('bedrock-agent-runtime', region_name='us-east-1'),  # Bedrock은 us-east-1 사용
-            'bedrock_runtime': session.client('bedrock-runtime', region_name='us-east-1')
+            'bedrock_agent_runtime': session.client('bedrock-agent-runtime', region_name='us-west-2'),
+            'bedrock_runtime': session.client('bedrock-runtime', region_name='us-west-2')
         }
     except (NoCredentialsError, ClientError) as e:
         st.error(f"AWS 서비스 초기화 중 오류가 발생했습니다: {e}")

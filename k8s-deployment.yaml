@@ -23,7 +23,7 @@ spec:
         - containerPort: 8501
         env:
         - name: AWS_DEFAULT_REGION
-          value: "ap-northeast-2"  # 원하는 리전으로 변경
+          value: "us-west-2"  # 미국 서부 리전
         resources:
           requests:
             memory: "512Mi"
