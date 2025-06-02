@@ -179,7 +179,44 @@ with st.sidebar:
             models = st.session_state.get('available_models', [])
             
             if models:
-                model_options = [f"{model['providerName']} - {model['modelName']} ({model['modelId']})" for model in models]
+                # 모델 이름을 간단하게 변환하는 함수
+                def get_simple_model_name(model_id, provider_name):
+                    if 'claude-3-5-sonnet' in model_id:
+                        return "Claude 3.5 Sonnet"
+                    elif 'claude-3-5-haiku' in model_id:
+                        return "Claude 3.5 Haiku"
+                    elif 'claude-3-opus' in model_id:
+                        return "Claude 3 Opus"
+                    elif 'claude-3-sonnet' in model_id:
+                        return "Claude 3 Sonnet"
+                    elif 'claude-3-haiku' in model_id:
+                        return "Claude 3 Haiku"
+                    elif 'titan-text-premier' in model_id:
+                        return "Titan Text Premier"
+                    elif 'titan-text-express' in model_id:
+                        return "Titan Text Express"
+                    elif 'titan-text-lite' in model_id:
+                        return "Titan Text Lite"
+                    elif 'llama3-2-90b' in model_id:
+                        return "Llama 3.2 90B"
+                    elif 'llama3-2-11b' in model_id:
+                        return "Llama 3.2 11B"
+                    elif 'llama3-2-3b' in model_id:
+                        return "Llama 3.2 3B"
+                    elif 'llama3-2-1b' in model_id:
+                        return "Llama 3.2 1B"
+                    elif 'command-r-plus' in model_id:
+                        return "Command R+"
+                    elif 'command-r' in model_id:
+                        return "Command R"
+                    elif 'jamba-1-5-large' in model_id:
+                        return "Jamba 1.5 Large"
+                    elif 'jamba-1-5-mini' in model_id:
+                        return "Jamba 1.5 Mini"
+                    else:
+                        return f"{provider_name} Model"
+                
+                model_options = [get_simple_model_name(model['modelId'], model['providerName']) for model in models]
                 model_ids = [model['modelId'] for model in models]
                 
                 selected_index = st.selectbox(
@@ -219,7 +256,7 @@ with st.sidebar:
                 st.session_state.temperature = temperature
                 st.session_state.max_tokens = max_tokens
                 
-                st.success(f"✅ 선택된 모델: {models[selected_index]['modelName']}")
+                st.success(f"✅ 선택된 모델: {model_options[selected_index]}")
             else:
                 st.warning("사용 가능한 모델이 없습니다.")
                 if st.button("🔄 모델 목록 새로고침"):
