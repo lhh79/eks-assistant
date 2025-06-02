@@ -1,5 +1,9 @@
 
 import streamlit as st
+import boto3
+from botocore.exceptions import ClientError, NoCredentialsError
+import json
+import time
 
 # 페이지 설정
 st.set_page_config(
@@ -9,12 +13,103 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+# AWS 클라이언트 초기화
+@st.cache_resource
+def init_aws_clients():
+    """AWS 클라이언트들을 초기화합니다."""
+    try:
+        session = boto3.Session()
+        return {
+            'eks': session.client('eks'),
+            'bedrock_agent_runtime': session.client('bedrock-agent-runtime'),
+            'bedrock_runtime': session.client('bedrock-runtime')
+        }
+    except NoCredentialsError:
+        st.error("AWS 자격 증명이 설정되지 않았습니다. AWS 자격 증명을 확인해주세요.")
+        return None
+
+# EKS 클러스터 정보 조회
+def get_eks_clusters(eks_client):
+    """EKS 클러스터 목록을 조회합니다."""
+    try:
+        response = eks_client.list_clusters()
+        clusters = []
+        
+        for cluster_name in response['clusters']:
+            cluster_detail = eks_client.describe_cluster(name=cluster_name)
+            clusters.append({
+                'name': cluster_name,
+                'status': cluster_detail['cluster']['status'],
+                'version': cluster_detail['cluster']['version'],
+                'endpoint': cluster_detail['cluster']['endpoint'],
+                'created_at': cluster_detail['cluster']['createdAt']
+            })
+        
+        return clusters
+    except ClientError as e:
+        st.error(f"EKS 클러스터 조회 중 오류가 발생했습니다: {e}")
+        return []
+
+# Bedrock Agent 호출
+def invoke_bedrock_agent(bedrock_agent_runtime, agent_id, agent_alias_id, prompt):
+    """Bedrock Agent를 호출합니다."""
+    try:
+        response = bedrock_agent_runtime.invoke_agent(
+            agentId=agent_id,
+            agentAliasId=agent_alias_id,
+            sessionId=f"session-{int(time.time())}",
+            inputText=prompt
+        )
+        
+        # 스트리밍 응답 처리
+        result = ""
+        for event in response['completion']:
+            if 'chunk' in event:
+                chunk = event['chunk']
+                if 'bytes' in chunk:
+                    result += chunk['bytes'].decode('utf-8')
+        
+        return result
+    except ClientError as e:
+        st.error(f"Bedrock Agent 호출 중 오류가 발생했습니다: {e}")
+        return None
+
+# AWS 설정 초기화
+aws_clients = init_aws_clients()
+
+# 세션 상태 초기화
+if 'chat_history' not in st.session_state:
+    st.session_state.chat_history = []
+if 'selected_cluster' not in st.session_state:
+    st.session_state.selected_cluster = None
+
 # 사이드바 구성
 with st.sidebar:
     st.markdown("### EKS 관리 도구")
     
+    # AWS 설정 섹션
+    st.markdown("#### AWS 설정")
+    
+    # Bedrock Agent 설정
+    agent_id = st.text_input("Bedrock Agent ID", 
+                            value=st.session_state.get('agent_id', ''),
+                            help="Amazon Bedrock Agent의 ID를 입력하세요")
+    
+    agent_alias_id = st.text_input("Agent Alias ID", 
+                                  value=st.session_state.get('agent_alias_id', 'TSTALIASID'),
+                                  help="Agent의 Alias ID를 입력하세요")
+    
+    # 설정 저장
+    if st.button("설정 저장"):
+        st.session_state.agent_id = agent_id
+        st.session_state.agent_alias_id = agent_alias_id
+        st.success("설정이 저장되었습니다!")
+    
+    st.markdown("---")
+    
     # 새 대화 시작 버튼
     if st.button("➕ 새 대화 시작", use_container_width=True):
+        st.session_state.chat_history = []
         st.rerun()
     
     st.markdown("---")
@@ -28,9 +123,10 @@ with st.sidebar:
         ("💾", "RDS 연결 설정")
     ]
     
+    selected_menu = None
     for icon, label in menu_items:
         if st.button(f"{icon} {label}", use_container_width=True):
-            st.session_state.selected_menu = label
+            selected_menu = label
     
     st.markdown("---")
     st.markdown("**최근 (4개)**")
@@ -44,15 +140,70 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# EKS 클러스터 상태 섹션
-st.markdown("### 📊 EKS 클러스터 상태")
-col1, col2 = st.columns([3, 1])
+# AWS 연결 상태 확인
+if aws_clients:
+    st.success("✅ AWS 서비스에 연결되었습니다.")
+    
+    # EKS 클러스터 상태 섹션
+    st.markdown("### 📊 EKS 클러스터 상태")
+    
+    if st.button("🔄 클러스터 목록 새로고침"):
+        st.cache_resource.clear()
+    
+    # EKS 클러스터 목록 조회
+    clusters = get_eks_clusters(aws_clients['eks'])
+    
+    if clusters:
+        col1, col2 = st.columns([3, 1])
+        
+        with col1:
+            cluster_names = [cluster['name'] for cluster in clusters]
+            selected_cluster_name = st.selectbox(
+                "클러스터 선택",
+                cluster_names,
+                index=0 if cluster_names else None
+            )
+            
+            if selected_cluster_name:
+                selected_cluster = next(c for c in clusters if c['name'] == selected_cluster_name)
+                st.session_state.selected_cluster = selected_cluster
+        
+        with col2:
+            if st.button("클러스터 세부 정보", type="primary"):
+                if st.session_state.selected_cluster:
+                    cluster = st.session_state.selected_cluster
+                    st.info(f"""
+                    **클러스터**: {cluster['name']}
+                    **상태**: {cluster['status']}
+                    **버전**: {cluster['version']}
+                    **생성일**: {cluster['created_at'].strftime('%Y-%m-%d %H:%M:%S')}
+                    """)
+        
+        # 클러스터 상태 표시
+        if clusters:
+            cols = st.columns(len(clusters))
+            for i, cluster in enumerate(clusters):
+                with cols[i]:
+                    status_color = "🟢" if cluster['status'] == 'ACTIVE' else "🔴"
+                    st.metric(
+                        label=f"{status_color} {cluster['name']}",
+                        value=cluster['status'],
+                        delta=f"v{cluster['version']}"
+                    )
+    else:
+        st.warning("조회된 EKS 클러스터가 없습니다.")
+else:
+    st.error("❌ AWS 서비스 연결에 실패했습니다. 자격 증명을 확인해주세요.")
 
-with col1:
-    cluster_name = st.text_input("", placeholder="lgons-champions-agent-eks", key="cluster_input")
-
-with col2:
-    st.button("새로 검색하기", type="primary")
+# 채팅 기록 표시
+if st.session_state.chat_history:
+    st.markdown("### 💬 대화 기록")
+    for i, (role, message) in enumerate(st.session_state.chat_history):
+        if role == "user":
+            st.markdown(f"**사용자**: {message}")
+        else:
+            st.markdown(f"**어시스턴트**: {message}")
+        st.markdown("---")
 
 # 기능 카드들
 st.markdown("### 주요 기능")
@@ -60,62 +211,111 @@ st.markdown("### 주요 기능")
 col1, col2 = st.columns(2)
 
 with col1:
-    with st.container():
-        st.markdown("""
-        <div style="border: 1px solid #333; border-radius: 8px; padding: 1rem; margin: 0.5rem 0; background-color: #1e1e1e;">
-            <h4>☁️ How do I create an EKS cluster?</h4>
-            <p style="color: #ccc; font-size: 0.9rem;">Get a step-by-step guide to create and configure an EKS cluster</p>
-        </div>
-        """, unsafe_allow_html=True)
+    if st.button("☁️ How do I create an EKS cluster?", use_container_width=True):
+        if aws_clients and st.session_state.get('agent_id'):
+            with st.spinner("Bedrock Agent에서 응답을 가져오는 중..."):
+                response = invoke_bedrock_agent(
+                    aws_clients['bedrock_agent_runtime'],
+                    st.session_state.agent_id,
+                    st.session_state.agent_alias_id,
+                    "How do I create an EKS cluster? Provide step-by-step instructions."
+                )
+                if response:
+                    st.session_state.chat_history.append(("user", "How do I create an EKS cluster?"))
+                    st.session_state.chat_history.append(("assistant", response))
+                    st.rerun()
     
-    with st.container():
-        st.markdown("""
-        <div style="border: 1px solid #333; border-radius: 8px; padding: 1rem; margin: 0.5rem 0; background-color: #1e1e1e;">
-            <h4>🔧 Common kubectl commands for EKS</h4>
-            <p style="color: #ccc; font-size: 0.9rem;">Get the most useful kubectl commands for managing EKS clusters</p>
-        </div>
-        """, unsafe_allow_html=True)
+    if st.button("🔧 Common kubectl commands for EKS", use_container_width=True):
+        if aws_clients and st.session_state.get('agent_id'):
+            with st.spinner("Bedrock Agent에서 응답을 가져오는 중..."):
+                response = invoke_bedrock_agent(
+                    aws_clients['bedrock_agent_runtime'],
+                    st.session_state.agent_id,
+                    st.session_state.agent_alias_id,
+                    "What are the most common kubectl commands for managing EKS clusters?"
+                )
+                if response:
+                    st.session_state.chat_history.append(("user", "Common kubectl commands for EKS"))
+                    st.session_state.chat_history.append(("assistant", response))
+                    st.rerun()
 
 with col2:
-    with st.container():
-        st.markdown("""
-        <div style="border: 1px solid #333; border-radius: 8px; padding: 1rem; margin: 0.5rem 0; background-color: #1e1e1e;">
-            <h4>📊 Show me my EKS clusters</h4>
-            <p style="color: #ccc; font-size: 0.9rem;">List all available EKS clusters in my AWS account</p>
-        </div>
-        """, unsafe_allow_html=True)
+    if st.button("📊 Show me my EKS clusters", use_container_width=True):
+        if clusters:
+            cluster_info = "\n".join([f"- {c['name']} (상태: {c['status']}, 버전: {c['version']})" for c in clusters])
+            st.session_state.chat_history.append(("user", "Show me my EKS clusters"))
+            st.session_state.chat_history.append(("assistant", f"현재 AWS 계정의 EKS 클러스터 목록:\n{cluster_info}"))
+            st.rerun()
     
-    with st.container():
-        st.markdown("""
-        <div style="border: 1px solid #333; border-radius: 8px; padding: 1rem; margin: 0.5rem 0; background-color: #1e1e1e;">
-            <h4>📈 How do I scale my EKS deployment?</h4>
-            <p style="color: #ccc; font-size: 0.9rem;">Learn how to scale your applications running on EKS</p>
-        </div>
-        """, unsafe_allow_html=True)
+    if st.button("📈 How do I scale my EKS deployment?", use_container_width=True):
+        if aws_clients and st.session_state.get('agent_id'):
+            with st.spinner("Bedrock Agent에서 응답을 가져오는 중..."):
+                response = invoke_bedrock_agent(
+                    aws_clients['bedrock_agent_runtime'],
+                    st.session_state.agent_id,
+                    st.session_state.agent_alias_id,
+                    "How do I scale my EKS deployment? Include both horizontal and vertical scaling options."
+                )
+                if response:
+                    st.session_state.chat_history.append(("user", "How do I scale my EKS deployment?"))
+                    st.session_state.chat_history.append(("assistant", response))
+                    st.rerun()
 
 # 추가 기능 카드
-with st.container():
-    st.markdown("""
-    <div style="border: 1px solid #333; border-radius: 8px; padding: 1rem; margin: 1rem 0; background-color: #1e1e1e;">
-        <h4>💾 How to connect RDS to my EKS cluster?</h4>
-        <p style="color: #ccc; font-size: 0.9rem;">Steps to integrate your EKS cluster with AWS RDS</p>
-    </div>
-    """, unsafe_allow_html=True)
+if st.button("💾 How to connect RDS to my EKS cluster?", use_container_width=True):
+    if aws_clients and st.session_state.get('agent_id'):
+        with st.spinner("Bedrock Agent에서 응답을 가져오는 중..."):
+            response = invoke_bedrock_agent(
+                aws_clients['bedrock_agent_runtime'],
+                st.session_state.agent_id,
+                st.session_state.agent_alias_id,
+                "How do I connect RDS to my EKS cluster? Include security best practices."
+            )
+            if response:
+                st.session_state.chat_history.append(("user", "How to connect RDS to my EKS cluster?"))
+                st.session_state.chat_history.append(("assistant", response))
+                st.rerun()
 
 # 하단 입력 영역
 st.markdown("---")
 col1, col2, col3 = st.columns([8, 1, 1])
 
 with col1:
-    user_input = st.text_input("", placeholder="AWS EKS 관련 질문이나 명령어를 입력해주세요...", key="main_input")
+    user_input = st.text_input("", 
+                              placeholder="AWS EKS 관련 질문이나 명령어를 입력해주세요...", 
+                              key="main_input",
+                              label_visibility="hidden")
 
 with col2:
-    st.markdown("<div style='margin-top: 1.5rem;'>0/4000</div>", unsafe_allow_html=True)
+    char_count = len(user_input) if user_input else 0
+    st.markdown(f"<div style='margin-top: 1.5rem; color: #666;'>{char_count}/4000</div>", unsafe_allow_html=True)
 
 with col3:
     if st.button("📤", help="전송"):
-        if user_input:
-            st.success(f"질문을 받았습니다: {user_input}")
+        if user_input and aws_clients and st.session_state.get('agent_id'):
+            with st.spinner("Bedrock Agent에서 응답을 가져오는 중..."):
+                # 선택된 클러스터 정보를 컨텍스트에 추가
+                context = ""
+                if st.session_state.selected_cluster:
+                    cluster = st.session_state.selected_cluster
+                    context = f"현재 선택된 EKS 클러스터: {cluster['name']} (상태: {cluster['status']}, 버전: {cluster['version']})\n\n"
+                
+                full_prompt = context + user_input
+                response = invoke_bedrock_agent(
+                    aws_clients['bedrock_agent_runtime'],
+                    st.session_state.agent_id,
+                    st.session_state.agent_alias_id,
+                    full_prompt
+                )
+                
+                if response:
+                    st.session_state.chat_history.append(("user", user_input))
+                    st.session_state.chat_history.append(("assistant", response))
+                    st.rerun()
+        elif not st.session_state.get('agent_id'):
+            st.warning("Bedrock Agent ID를 먼저 설정해주세요.")
+        elif user_input:
+            st.error("AWS 서비스에 연결되지 않았습니다.")
 
 # CSS 스타일링
 st.markdown("""
@@ -146,12 +346,25 @@ st.markdown("""
         border: 1px solid #333;
     }
     
+    .stSelectbox > div > div > select {
+        background-color: #1e1e1e;
+        color: white;
+        border: 1px solid #333;
+    }
+    
     h1, h2, h3, h4 {
         color: white;
     }
     
     p {
         color: #ccc;
+    }
+    
+    .metric-container {
+        background-color: #1e1e1e;
+        padding: 1rem;
+        border-radius: 8px;
+        border: 1px solid #333;
     }
 </style>
 """, unsafe_allow_html=True)
