@@ -532,10 +532,11 @@ if st.session_state.chat_history:
                 </div>
                 """, unsafe_allow_html=True)
             else:
+                formatted_message = message.replace('\n', '<br>')
                 st.markdown(f"""
                 <div style="background-color: #1e1e1e; padding: 10px; border-radius: 10px; margin: 10px 0; border-left: 3px solid #2196F3;">
                     <strong>🤖 어시스턴트:</strong><br>
-                    {message.replace('\n', '<br>')}
+                    {formatted_message}
                 </div>
                 """, unsafe_allow_html=True)
 
