@@ -29,7 +29,6 @@ def init_aws_clients():
         
         # Access Key 기반 자격 증명이 있는 경우
         if aws_access_key_id and aws_secret_access_key:
-            st.info("🔑 Access Key 기반으로 AWS에 연결합니다.")
             session = boto3.Session(
                 aws_access_key_id=aws_access_key_id,
                 aws_secret_access_key=aws_secret_access_key,
@@ -37,7 +36,6 @@ def init_aws_clients():
             )
         else:
             # IAM Role 기반 자격 증명 시도
-            st.info("🏷️ IAM Role 기반으로 AWS에 연결을 시도합니다.")
             try:
                 # 기본 세션으로 IAM Role 자격 증명 사용
                 session = boto3.Session(region_name=region)
@@ -45,7 +43,6 @@ def init_aws_clients():
                 # 자격 증명 테스트
                 sts_client = session.client('sts')
                 identity = sts_client.get_caller_identity()
-                st.success(f"✅ IAM Role 기반 연결 성공: {identity.get('Arn', 'Unknown')}")
                 
             except Exception as e:
                 st.error(f"❌ AWS 자격 증명이 설정되지 않았습니다. EKS 환경에서는 IAM Role이, 로컬 환경에서는 Secrets에서 AWS_ACCESS_KEY_ID와 AWS_SECRET_ACCESS_KEY를 설정해주세요. 오류: {e}")
