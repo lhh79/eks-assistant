@@ -9,6 +9,7 @@ python = ">=3.10.0,<3.11"
 streamlit = "^1.27.2"
 boto3 = "^1.38.27"
 streamlit-authenticator = "^0.4.2"
+botocore = "^1.38.27"
 
 [tool.pyright]
 # https://github.com/microsoft/pyright/blob/main/docs/configuration.md
