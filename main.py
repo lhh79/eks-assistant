@@ -53,8 +53,11 @@ def get_available_models(bedrock_client):
         models = []
         
         for model in response['modelSummaries']:
-            # 텍스트 생성이 가능한 모델만 필터링
-            if 'TEXT' in model.get('inputModalities', []) and 'TEXT' in model.get('outputModalities', []):
+            # 텍스트 생성이 가능한 모델만 필터링하고 Claude 4 모델 제외
+            if ('TEXT' in model.get('inputModalities', []) and 
+                'TEXT' in model.get('outputModalities', []) and
+                'claude-4' not in model['modelId'].lower() and
+                'opus-4' not in model['modelId'].lower()):
                 models.append({
                     'modelId': model['modelId'],
                     'modelName': model['modelName'],
@@ -92,41 +95,7 @@ def get_eks_clusters(eks_client):
 def invoke_bedrock_model(bedrock_runtime, model_id, prompt, temperature=0.7, max_tokens=1000):
     """Bedrock 모델을 직접 호출합니다."""
     try:
-        # Claude 4 모델의 경우 inference profile 사용
-        if 'claude-4' in model_id or 'claude-opus-4' in model_id:
-            # Claude 4 모델들은 inference profile을 통해 호출
-            inference_profile_id = model_id.replace(':0', '')  # :0 제거
-            
-            body = {
-                "anthropic_version": "bedrock-2023-05-31",
-                "max_tokens": max_tokens,
-                "temperature": temperature,
-                "messages": [
-                    {
-                        "role": "user",
-                        "content": prompt
-                    }
-                ]
-            }
-            
-            # inference profile을 사용하여 호출
-            try:
-                response = bedrock_runtime.invoke_model(
-                    modelId=inference_profile_id,
-                    body=json.dumps(body),
-                    contentType='application/json'
-                )
-            except ClientError:
-                # inference profile이 실패하면 us-west-2 리전의 Claude 3.5 Sonnet으로 fallback
-                fallback_model = "anthropic.claude-3-5-sonnet-20241022-v2:0"
-                st.warning(f"Claude 4 모델 호출 실패. Claude 3.5 Sonnet으로 대체합니다.")
-                response = bedrock_runtime.invoke_model(
-                    modelId=fallback_model,
-                    body=json.dumps(body),
-                    contentType='application/json'
-                )
-                
-        elif 'anthropic.claude' in model_id:
+        if 'anthropic.claude' in model_id:
             body = {
                 "anthropic_version": "bedrock-2023-05-31",
                 "max_tokens": max_tokens,
@@ -194,7 +163,7 @@ def invoke_bedrock_model(bedrock_runtime, model_id, prompt, temperature=0.7, max
         response_body = json.loads(response['body'].read())
         
         # 모델별 응답 파싱
-        if 'anthropic.claude' in model_id or 'claude-4' in model_id:
+        if 'anthropic.claude' in model_id:
             return response_body['content'][0]['text']
         elif 'amazon.titan' in model_id:
             return response_body['results'][0]['outputText']
@@ -241,10 +210,8 @@ with st.sidebar:
             if models:
                 # 모델 이름을 간단하게 변환하는 함수
                 def get_simple_model_name(model_id, provider_name):
-                    # Claude 모델들
-                    if 'claude-4' in model_id:
-                        return "Claude 4.0"
-                    elif 'claude-3-5-sonnet' in model_id:
+                    # Claude 모델들 (Claude 4는 현재 지원하지 않음)
+                    if 'claude-3-5-sonnet' in model_id:
                         return "Claude 3.5 Sonnet"
                     elif 'claude-3-5-haiku' in model_id:
                         return "Claude 3.5 Haiku"
