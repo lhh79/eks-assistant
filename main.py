@@ -4,6 +4,7 @@ import boto3
 from botocore.exceptions import ClientError, NoCredentialsError
 import json
 import time
+import os
 
 # 페이지 설정
 st.set_page_config(
@@ -18,9 +19,22 @@ st.set_page_config(
 def init_aws_clients():
     """AWS 클라이언트들을 초기화합니다."""
     try:
+        # AWS 자격 증명 확인
+        aws_access_key_id = os.getenv('AWS_ACCESS_KEY_ID')
+        aws_secret_access_key = os.getenv('AWS_SECRET_ACCESS_KEY')
+        
+        if not aws_access_key_id or not aws_secret_access_key:
+            st.error("❌ AWS 자격 증명이 설정되지 않았습니다. Secrets에서 AWS_ACCESS_KEY_ID와 AWS_SECRET_ACCESS_KEY를 설정해주세요.")
+            return None
+        
         # 기본 리전 설정
         region = 'us-west-2'  # 미국 서부 리전
-        session = boto3.Session()
+        session = boto3.Session(
+            aws_access_key_id=aws_access_key_id,
+            aws_secret_access_key=aws_secret_access_key,
+            region_name=region
+        )
+        
         return {
             'eks': session.client('eks', region_name=region),
             'bedrock_agent_runtime': session.client('bedrock-agent-runtime', region_name='us-west-2'),
@@ -145,6 +159,12 @@ st.markdown("""
 # AWS 연결 상태 확인
 if aws_clients:
     st.success("✅ AWS 서비스에 연결되었습니다.")
+    
+    # 자격 증명 상태 표시
+    aws_access_key_id = os.getenv('AWS_ACCESS_KEY_ID')
+    if aws_access_key_id:
+        masked_key = aws_access_key_id[:4] + '*' * (len(aws_access_key_id) - 8) + aws_access_key_id[-4:]
+        st.info(f"🔑 AWS Access Key: {masked_key}")
     
     # EKS 클러스터 상태 섹션
     st.markdown("### 📊 EKS 클러스터 상태")
