@@ -573,45 +573,53 @@ if st.button("💾 How to connect RDS to my EKS cluster?", use_container_width=T
 
 # 하단 입력 영역
 st.markdown("---")
-col1, col2, col3 = st.columns([8, 1, 1])
 
-with col1:
-    user_input = st.text_input("", 
-                              placeholder="AWS EKS 관련 질문이나 명령어를 입력해주세요...", 
-                              key="main_input",
-                              label_visibility="hidden")
+# 채팅 입력 폼 생성 (엔터키로 전송 가능)
+with st.form(key='chat_form', clear_on_submit=True):
+    col1, col2, col3 = st.columns([8, 1, 1])
+    
+    with col1:
+        user_input = st.text_input("", 
+                                  placeholder="AWS EKS 관련 질문이나 명령어를 입력해주세요... (엔터키로 전송)", 
+                                  key="main_input",
+                                  label_visibility="hidden")
+    
+    with col2:
+        char_count = len(user_input) if user_input else 0
+        st.markdown(f"<div style='margin-top: 1.5rem; color: #666;'>{char_count}/4000</div>", unsafe_allow_html=True)
+    
+    with col3:
+        submitted = st.form_submit_button("📤", help="전송 (또는 엔터키)")
 
-with col2:
-    char_count = len(user_input) if user_input else 0
-    st.markdown(f"<div style='margin-top: 1.5rem; color: #666;'>{char_count}/4000</div>", unsafe_allow_html=True)
-
-with col3:
-    if st.button("📤", help="전송"):
-        if user_input and aws_clients and st.session_state.get('selected_model_id'):
-            with st.spinner("Bedrock 모델에서 응답을 가져오는 중..."):
-                # 선택된 클러스터 정보를 컨텍스트에 추가
-                context = ""
-                if st.session_state.selected_cluster:
-                    cluster = st.session_state.selected_cluster
-                    context = f"현재 선택된 EKS 클러스터: {cluster['name']} (상태: {cluster['status']}, 버전: {cluster['version']})\n\n"
-                
-                full_prompt = context + user_input
-                response = invoke_bedrock_model(
-                    aws_clients['bedrock_runtime'],
-                    st.session_state.selected_model_id,
-                    full_prompt,
-                    st.session_state.get('temperature', 0.7),
-                    st.session_state.get('max_tokens', 1000)
-                )
-                
-                if response:
-                    st.session_state.chat_history.append(("user", user_input))
-                    st.session_state.chat_history.append(("assistant", response))
-                    st.rerun()
-        elif not st.session_state.get('selected_model_id'):
-            st.warning("Bedrock 모델을 먼저 선택해주세요.")
-        elif user_input:
-            st.error("AWS 서비스에 연결되지 않았습니다.")
+# 폼이 제출되었을 때 처리
+if submitted and user_input:
+    if aws_clients and st.session_state.get('selected_model_id'):
+        with st.spinner("Bedrock 모델에서 응답을 가져오는 중..."):
+            # 선택된 클러스터 정보를 컨텍스트에 추가
+            context = ""
+            if st.session_state.selected_cluster:
+                cluster = st.session_state.selected_cluster
+                context = f"현재 선택된 EKS 클러스터: {cluster['name']} (상태: {cluster['status']}, 버전: {cluster['version']})\n\n"
+            
+            full_prompt = context + user_input
+            response = invoke_bedrock_model(
+                aws_clients['bedrock_runtime'],
+                st.session_state.selected_model_id,
+                full_prompt,
+                st.session_state.get('temperature', 0.7),
+                st.session_state.get('max_tokens', 1000)
+            )
+            
+            if response:
+                st.session_state.chat_history.append(("user", user_input))
+                st.session_state.chat_history.append(("assistant", response))
+                st.rerun()
+    elif not st.session_state.get('selected_model_id'):
+        st.warning("Bedrock 모델을 먼저 선택해주세요.")
+    else:
+        st.error("AWS 서비스에 연결되지 않았습니다.")
+elif submitted and not user_input:
+    st.warning("질문을 입력해주세요.")
 
 # CSS 스타일링
 st.markdown("""
