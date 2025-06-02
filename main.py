@@ -181,40 +181,42 @@ with st.sidebar:
             if models:
                 # 모델 이름을 간단하게 변환하는 함수
                 def get_simple_model_name(model_id, provider_name):
-                    if 'claude-3-5-sonnet' in model_id:
-                        return "Claude 3.5 Sonnet"
+                    if 'claude-4' in model_id:
+                        return "4.0"
+                    elif 'claude-3-5-sonnet' in model_id:
+                        return "3.5 Sonnet"
                     elif 'claude-3-5-haiku' in model_id:
-                        return "Claude 3.5 Haiku"
+                        return "3.5 Haiku"
                     elif 'claude-3-opus' in model_id:
-                        return "Claude 3 Opus"
+                        return "3 Opus"
                     elif 'claude-3-sonnet' in model_id:
-                        return "Claude 3 Sonnet"
+                        return "3 Sonnet"
                     elif 'claude-3-haiku' in model_id:
-                        return "Claude 3 Haiku"
+                        return "3 Haiku"
                     elif 'titan-text-premier' in model_id:
-                        return "Titan Text Premier"
+                        return "Text Premier"
                     elif 'titan-text-express' in model_id:
-                        return "Titan Text Express"
+                        return "Text Express"
                     elif 'titan-text-lite' in model_id:
-                        return "Titan Text Lite"
+                        return "Text Lite"
                     elif 'llama3-2-90b' in model_id:
-                        return "Llama 3.2 90B"
+                        return "3.2 90B"
                     elif 'llama3-2-11b' in model_id:
-                        return "Llama 3.2 11B"
+                        return "3.2 11B"
                     elif 'llama3-2-3b' in model_id:
-                        return "Llama 3.2 3B"
+                        return "3.2 3B"
                     elif 'llama3-2-1b' in model_id:
-                        return "Llama 3.2 1B"
+                        return "3.2 1B"
                     elif 'command-r-plus' in model_id:
-                        return "Command R+"
+                        return "R+"
                     elif 'command-r' in model_id:
-                        return "Command R"
+                        return "R"
                     elif 'jamba-1-5-large' in model_id:
-                        return "Jamba 1.5 Large"
+                        return "1.5 Large"
                     elif 'jamba-1-5-mini' in model_id:
-                        return "Jamba 1.5 Mini"
+                        return "1.5 Mini"
                     else:
-                        return f"{provider_name} Model"
+                        return "Unknown Model"
                 
                 model_options = [get_simple_model_name(model['modelId'], model['providerName']) for model in models]
                 model_ids = [model['modelId'] for model in models]
