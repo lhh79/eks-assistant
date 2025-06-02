@@ -159,6 +159,10 @@ if 'chat_history' not in st.session_state:
     st.session_state.chat_history = []
 if 'selected_cluster' not in st.session_state:
     st.session_state.selected_cluster = None
+if 'chat_sessions' not in st.session_state:
+    st.session_state.chat_sessions = []
+if 'current_session_id' not in st.session_state:
+    st.session_state.current_session_id = 0
 
 # 사이드바 구성
 with st.sidebar:
@@ -298,6 +302,22 @@ with st.sidebar:
     
     # 새 대화 시작 버튼
     if st.button("➕ 새 대화 시작", use_container_width=True):
+        # 현재 대화가 있으면 저장
+        if st.session_state.chat_history:
+            session_title = f"대화 #{len(st.session_state.chat_sessions) + 1}"
+            if st.session_state.chat_history:
+                first_user_message = next((msg for role, msg in st.session_state.chat_history if role == "user"), "")
+                if first_user_message:
+                    session_title = first_user_message[:30] + "..." if len(first_user_message) > 30 else first_user_message
+            
+            st.session_state.chat_sessions.append({
+                'id': st.session_state.current_session_id,
+                'title': session_title,
+                'messages': st.session_state.chat_history.copy(),
+                'timestamp': time.strftime('%H:%M')
+            })
+            st.session_state.current_session_id += 1
+        
         st.session_state.chat_history = []
         st.rerun()
     
@@ -359,8 +379,42 @@ with st.sidebar:
         st.code("kubectl patch deployment <deployment-name> -p '{\"spec\":{\"replicas\":5}}'", language="bash")
     
     st.markdown("---")
-    st.markdown("**최근 (4개)**")
-    st.button("💬 새 대화 (8:17 #1)", use_container_width=True)
+    
+    # 이전 채팅 기록
+    st.markdown("#### 📝 이전 대화")
+    
+    if st.session_state.chat_sessions:
+        # 최근 5개 대화만 표시
+        recent_sessions = st.session_state.chat_sessions[-5:]
+        recent_sessions.reverse()  # 최신순으로 정렬
+        
+        for session in recent_sessions:
+            col1, col2 = st.columns([4, 1])
+            
+            with col1:
+                if st.button(f"💬 {session['title']}", 
+                           key=f"session_{session['id']}", 
+                           use_container_width=True,
+                           help=f"대화 시간: {session['timestamp']}"):
+                    # 선택된 대화로 복원
+                    st.session_state.chat_history = session['messages'].copy()
+                    st.rerun()
+            
+            with col2:
+                if st.button("🗑️", 
+                           key=f"delete_{session['id']}", 
+                           help="대화 삭제"):
+                    st.session_state.chat_sessions = [s for s in st.session_state.chat_sessions if s['id'] != session['id']]
+                    st.rerun()
+        
+        st.markdown("---")
+        
+        # 모든 대화 삭제 버튼
+        if st.button("🗑️ 모든 대화 삭제", use_container_width=True):
+            st.session_state.chat_sessions = []
+            st.rerun()
+    else:
+        st.info("저장된 대화가 없습니다.")
 
 # 메인 콘텐츠 영역
 st.markdown("""
