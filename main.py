@@ -429,12 +429,6 @@ st.markdown("""
 if aws_clients:
     st.success("✅ AWS 서비스에 연결되었습니다.")
     
-    # 자격 증명 상태 표시
-    aws_access_key_id = os.getenv('AWS_ACCESS_KEY_ID')
-    if aws_access_key_id:
-        masked_key = aws_access_key_id[:4] + '*' * (len(aws_access_key_id) - 8) + aws_access_key_id[-4:]
-        st.info(f"🔑 AWS Access Key: {masked_key}")
-    
     # EKS 클러스터 상태 섹션
     st.markdown("### 📊 EKS 클러스터 상태")
     
