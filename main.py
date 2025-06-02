@@ -92,7 +92,7 @@ def get_eks_clusters(eks_client):
         return []
 
 # Bedrock 모델 호출
-def invoke_bedrock_model(bedrock_runtime, model_id, prompt, temperature=0.7, max_tokens=1000):
+def invoke_bedrock_model(bedrock_runtime, model_id, prompt, temperature=0.7, max_tokens=1000, top_p=0.9, top_k=250):
     """Bedrock 모델을 직접 호출합니다."""
     try:
         if 'anthropic.claude' in model_id:
@@ -100,6 +100,8 @@ def invoke_bedrock_model(bedrock_runtime, model_id, prompt, temperature=0.7, max
                 "anthropic_version": "bedrock-2023-05-31",
                 "max_tokens": max_tokens,
                 "temperature": temperature,
+                "top_p": top_p,
+                "top_k": top_k,
                 "messages": [
                     {
                         "role": "user",
@@ -120,7 +122,7 @@ def invoke_bedrock_model(bedrock_runtime, model_id, prompt, temperature=0.7, max
                 "textGenerationConfig": {
                     "maxTokenCount": max_tokens,
                     "temperature": temperature,
-                    "topP": 0.9
+                    "topP": top_p
                 }
             }
             
@@ -135,7 +137,8 @@ def invoke_bedrock_model(bedrock_runtime, model_id, prompt, temperature=0.7, max
                 "prompt": prompt,
                 "max_gen_len": max_tokens,
                 "temperature": temperature,
-                "top_p": 0.9
+                "top_p": top_p,
+                "top_k": top_k
             }
             
             response = bedrock_runtime.invoke_model(
@@ -150,7 +153,8 @@ def invoke_bedrock_model(bedrock_runtime, model_id, prompt, temperature=0.7, max
                 "inputText": prompt,
                 "textGenerationConfig": {
                     "maxTokenCount": max_tokens,
-                    "temperature": temperature
+                    "temperature": temperature,
+                    "topP": top_p
                 }
             }
             
@@ -302,6 +306,15 @@ with st.sidebar:
                         step=0.1,
                         help="창의성 조절 (0: 일관성, 1: 창의적)"
                     )
+                    
+                    top_p = st.slider(
+                        "Top P",
+                        min_value=0.0,
+                        max_value=1.0,
+                        value=0.9,
+                        step=0.1,
+                        help="nucleus sampling 확률 (0.1: 보수적, 0.9: 다양한)"
+                    )
                 
                 with col2:
                     max_tokens = st.number_input(
@@ -312,11 +325,22 @@ with st.sidebar:
                         step=100,
                         help="최대 응답 길이"
                     )
+                    
+                    top_k = st.number_input(
+                        "Top K",
+                        min_value=1,
+                        max_value=500,
+                        value=250,
+                        step=10,
+                        help="상위 K개 토큰 선택 (낮을수록 일관성)"
+                    )
                 
                 # 설정 저장
                 st.session_state.selected_model_id = selected_model_id
                 st.session_state.temperature = temperature
                 st.session_state.max_tokens = max_tokens
+                st.session_state.top_p = top_p
+                st.session_state.top_k = top_k
                 
                 st.success(f"✅ 선택된 모델: {model_options[selected_index]}")
             else:
@@ -603,7 +627,9 @@ with col1:
                     st.session_state.selected_model_id,
                     "How do I create an EKS cluster? Provide step-by-step instructions.",
                     st.session_state.get('temperature', 0.7),
-                    st.session_state.get('max_tokens', 1000)
+                    st.session_state.get('max_tokens', 1000),
+                    st.session_state.get('top_p', 0.9),
+                    st.session_state.get('top_k', 250)
                 )
                 if response:
                     st.session_state.chat_history.append(("user", "How do I create an EKS cluster?"))
@@ -618,7 +644,9 @@ with col1:
                     st.session_state.selected_model_id,
                     "What are the most common kubectl commands for managing EKS clusters?",
                     st.session_state.get('temperature', 0.7),
-                    st.session_state.get('max_tokens', 1000)
+                    st.session_state.get('max_tokens', 1000),
+                    st.session_state.get('top_p', 0.9),
+                    st.session_state.get('top_k', 250)
                 )
                 if response:
                     st.session_state.chat_history.append(("user", "Common kubectl commands for EKS"))
@@ -641,7 +669,9 @@ with col2:
                     st.session_state.selected_model_id,
                     "How do I scale my EKS deployment? Include both horizontal and vertical scaling options.",
                     st.session_state.get('temperature', 0.7),
-                    st.session_state.get('max_tokens', 1000)
+                    st.session_state.get('max_tokens', 1000),
+                    st.session_state.get('top_p', 0.9),
+                    st.session_state.get('top_k', 250)
                 )
                 if response:
                     st.session_state.chat_history.append(("user", "How do I scale my EKS deployment?"))
@@ -657,7 +687,9 @@ if st.button("💾 How to connect RDS to my EKS cluster?", use_container_width=T
                 st.session_state.selected_model_id,
                 "How do I connect RDS to my EKS cluster? Include security best practices.",
                 st.session_state.get('temperature', 0.7),
-                st.session_state.get('max_tokens', 1000)
+                st.session_state.get('max_tokens', 1000),
+                st.session_state.get('top_p', 0.9),
+                st.session_state.get('top_k', 250)
             )
             if response:
                 st.session_state.chat_history.append(("user", "How to connect RDS to my EKS cluster?"))
@@ -700,7 +732,9 @@ if submitted and user_input:
                 st.session_state.selected_model_id,
                 full_prompt,
                 st.session_state.get('temperature', 0.7),
-                st.session_state.get('max_tokens', 1000)
+                st.session_state.get('max_tokens', 1000),
+                st.session_state.get('top_p', 0.9),
+                st.session_state.get('top_k', 250)
             )
             
             if response:
