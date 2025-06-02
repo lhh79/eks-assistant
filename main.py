@@ -5,6 +5,7 @@ from botocore.exceptions import ClientError, NoCredentialsError
 import json
 import time
 import os
+from datetime import datetime
 
 # 페이지 설정
 st.set_page_config(
@@ -314,7 +315,7 @@ with st.sidebar:
                 'id': st.session_state.current_session_id,
                 'title': session_title,
                 'messages': st.session_state.chat_history.copy(),
-                'timestamp': time.strftime('%H:%M')
+                'timestamp': datetime.now().strftime('%H:%M')
             })
             st.session_state.current_session_id += 1
         
