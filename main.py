@@ -65,8 +65,9 @@ def get_available_models(bedrock_client):
         models = []
         
         for model in response['modelSummaries']:
-            # 텍스트 생성이 가능한 모델만 필터링하고 Claude 4 모델 제외
-            if ('TEXT' in model.get('inputModalities', []) and 
+            # Anthropic Claude 모델만 필터링하고 Claude 4 모델 제외
+            if ('anthropic.claude' in model['modelId'] and
+                'TEXT' in model.get('inputModalities', []) and 
                 'TEXT' in model.get('outputModalities', []) and
                 'claude-4' not in model['modelId'].lower() and
                 'opus-4' not in model['modelId'].lower()):
@@ -128,65 +129,11 @@ def invoke_bedrock_model(bedrock_runtime, model_id, prompt, temperature=0.7, max
                 contentType='application/json'
             )
             
-        elif 'amazon.titan' in model_id:
-            body = {
-                "inputText": prompt,
-                "textGenerationConfig": {
-                    "maxTokenCount": max_tokens,
-                    "temperature": temperature,
-                    "topP": top_p
-                }
-            }
-            
-            response = bedrock_runtime.invoke_model(
-                modelId=model_id,
-                body=json.dumps(body),
-                contentType='application/json'
-            )
-            
-        elif 'meta.llama' in model_id:
-            body = {
-                "prompt": prompt,
-                "max_gen_len": max_tokens,
-                "temperature": temperature,
-                "top_p": top_p,
-                "top_k": top_k
-            }
-            
-            response = bedrock_runtime.invoke_model(
-                modelId=model_id,
-                body=json.dumps(body),
-                contentType='application/json'
-            )
-            
-        else:
-            # 기본 형식
-            body = {
-                "inputText": prompt,
-                "textGenerationConfig": {
-                    "maxTokenCount": max_tokens,
-                    "temperature": temperature,
-                    "topP": top_p
-                }
-            }
-            
-            response = bedrock_runtime.invoke_model(
-                modelId=model_id,
-                body=json.dumps(body),
-                contentType='application/json'
-            )
-        
-        response_body = json.loads(response['body'].read())
-        
-        # 모델별 응답 파싱
-        if 'anthropic.claude' in model_id:
+            response_body = json.loads(response['body'].read())
             return response_body['content'][0]['text']
-        elif 'amazon.titan' in model_id:
-            return response_body['results'][0]['outputText']
-        elif 'meta.llama' in model_id:
-            return response_body['generation']
         else:
-            return response_body.get('outputText', str(response_body))
+            st.error(f"지원되지 않는 모델입니다: {model_id}. Anthropic Claude 모델만 지원됩니다.")
+            return None
             
     except ClientError as e:
         st.error(f"Bedrock 모델 호출 중 오류가 발생했습니다: {e}")
@@ -226,7 +173,7 @@ with st.sidebar:
             if models:
                 # 모델 이름을 간단하게 변환하는 함수
                 def get_simple_model_name(model_id, provider_name):
-                    # Claude 모델들 (Claude 4는 현재 지원하지 않음)
+                    # Claude 모델들만 처리
                     if 'claude-3-5-sonnet' in model_id:
                         return "Claude 3.5 Sonnet"
                     elif 'claude-3-5-haiku' in model_id:
@@ -239,53 +186,8 @@ with st.sidebar:
                         return "Claude 3 Haiku"
                     elif 'claude' in model_id:
                         return f"Claude ({model_id.split('.')[-1]})"
-                    
-                    # Amazon Titan 모델들
-                    elif 'titan-text-premier' in model_id:
-                        return "Titan Text Premier"
-                    elif 'titan-text-express' in model_id:
-                        return "Titan Text Express"
-                    elif 'titan-text-lite' in model_id:
-                        return "Titan Text Lite"
-                    elif 'titan' in model_id:
-                        return f"Titan ({model_id.split('.')[-1]})"
-                    
-                    # Meta Llama 모델들
-                    elif 'llama3-2-90b' in model_id:
-                        return "Llama 3.2 90B"
-                    elif 'llama3-2-11b' in model_id:
-                        return "Llama 3.2 11B"
-                    elif 'llama3-2-3b' in model_id:
-                        return "Llama 3.2 3B"
-                    elif 'llama3-2-1b' in model_id:
-                        return "Llama 3.2 1B"
-                    elif 'llama' in model_id:
-                        return f"Llama ({model_id.split('.')[-1]})"
-                    
-                    # Cohere Command 모델들
-                    elif 'command-r-plus' in model_id:
-                        return "Command R+"
-                    elif 'command-r' in model_id:
-                        return "Command R"
-                    elif 'command' in model_id:
-                        return f"Command ({model_id.split('.')[-1]})"
-                    
-                    # AI21 Jamba 모델들
-                    elif 'jamba-1-5-large' in model_id:
-                        return "Jamba 1.5 Large"
-                    elif 'jamba-1-5-mini' in model_id:
-                        return "Jamba 1.5 Mini"
-                    elif 'jamba' in model_id:
-                        return f"Jamba ({model_id.split('.')[-1]})"
-                    
-                    # 기타 모델들 - 제공사명과 모델ID의 마지막 부분 사용
                     else:
-                        # 모델 ID에서 버전 정보 추출 시도
-                        model_parts = model_id.split('.')
-                        if len(model_parts) > 1:
-                            return f"{provider_name} ({model_parts[-1]})"
-                        else:
-                            return f"{provider_name} Model"
+                        return f"Claude Model ({model_id.split('.')[-1]})"
                 
                 model_options = [get_simple_model_name(model['modelId'], model['providerName']) for model in models]
                 model_ids = [model['modelId'] for model in models]
