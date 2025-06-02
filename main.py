@@ -37,8 +37,7 @@ def init_aws_clients():
         
         return {
             'eks': session.client('eks', region_name=region),
-            'bedrock_agent_runtime': session.client('bedrock-agent-runtime', region_name='us-west-2'),
-            'bedrock_runtime': session.client('bedrock-runtime', region_name='us-west-2')
+            'bedrock_agent_runtime': session.client('bedrock-agent-runtime', region_name='us-west-2')
         }
     except (NoCredentialsError, ClientError) as e:
         st.error(f"AWS 서비스 초기화 중 오류가 발생했습니다: {e}")
@@ -116,68 +115,11 @@ with st.sidebar:
                                       value=st.session_state.get('agent_alias_id', 'TSTALIASID'),
                                       help="Agent의 Alias ID를 입력하세요")
     
-    # Bedrock 모델 설정
-    with st.expander("🧠 Bedrock 모델 설정", expanded=False):
-        model_options = [
-            "anthropic.claude-3-5-sonnet-20241022-v2:0",
-            "anthropic.claude-3-5-haiku-20241022-v1:0",
-            "anthropic.claude-3-opus-20240229-v1:0",
-            "anthropic.claude-3-sonnet-20240229-v1:0",
-            "anthropic.claude-3-haiku-20240307-v1:0",
-            "amazon.titan-text-premier-v1:0",
-            "amazon.titan-text-express-v1",
-            "amazon.titan-text-lite-v1",
-            "meta.llama3-2-90b-instruct-v1:0",
-            "meta.llama3-2-11b-instruct-v1:0",
-            "meta.llama3-2-3b-instruct-v1:0",
-            "meta.llama3-2-1b-instruct-v1:0",
-            "cohere.command-r-plus-v1:0",
-            "cohere.command-r-v1:0",
-            "ai21.jamba-1-5-large-v1:0",
-            "ai21.jamba-1-5-mini-v1:0"
-        ]
-        
-        selected_model = st.selectbox(
-            "사용할 모델 선택",
-            model_options,
-            index=0,
-            help="Bedrock에서 사용할 AI 모델을 선택하세요"
-        )
-        
-        temperature = st.slider(
-            "Temperature (창의성 조절)",
-            min_value=0.0,
-            max_value=1.0,
-            value=0.7,
-            step=0.1,
-            help="0에 가까울수록 일관성, 1에 가까울수록 창의적"
-        )
-        
-        max_tokens = st.number_input(
-            "Max Tokens (최대 응답 길이)",
-            min_value=100,
-            max_value=4000,
-            value=1000,
-            step=100,
-            help="응답의 최대 토큰 수를 설정하세요"
-        )
-        
-        system_prompt = st.text_area(
-            "System Prompt (시스템 프롬프트)",
-            value="You are an AWS EKS expert assistant. Provide helpful, accurate, and practical guidance for EKS cluster management, kubectl commands, and AWS best practices.",
-            height=100,
-            help="AI의 역할과 응답 스타일을 정의하는 시스템 프롬프트"
-        )
-    
     # 설정 저장
     if st.button("💾 설정 저장", use_container_width=True):
         st.session_state.agent_id = agent_id
         st.session_state.agent_alias_id = agent_alias_id
-        st.session_state.selected_model = selected_model
-        st.session_state.temperature = temperature
-        st.session_state.max_tokens = max_tokens
-        st.session_state.system_prompt = system_prompt
-        st.success("✅ 설정이 저장되었습니다!")
+        st.success("✅ Bedrock Agent 설정이 저장되었습니다!")
     
     st.markdown("---")
     
