@@ -328,18 +328,21 @@ with st.sidebar:
         # 현재 대화가 있으면 저장
         if st.session_state.chat_history:
             session_title = f"대화 #{len(st.session_state.chat_sessions) + 1}"
-            if st.session_state.chat_history:
-                first_user_message = next((msg for role, msg in st.session_state.chat_history if role == "user"), "")
-                if first_user_message:
-                    session_title = first_user_message[:30] + "..." if len(first_user_message) > 30 else first_user_message
+            first_user_message = next((msg for role, msg in st.session_state.chat_history if role == "user"), "")
+            if first_user_message:
+                session_title = first_user_message[:30] + ("..." if len(first_user_message) > 30 else "")
             
-            st.session_state.chat_sessions.append({
+            new_session = {
                 'id': st.session_state.current_session_id,
                 'title': session_title,
                 'messages': st.session_state.chat_history.copy(),
                 'timestamp': datetime.now().strftime('%H:%M')
-            })
+            }
+            
+            st.session_state.chat_sessions.append(new_session)
             st.session_state.current_session_id += 1
+            
+            st.success(f"✅ 현재 대화를 '{session_title}'로 저장했습니다.")
         
         st.session_state.chat_history = []
         st.rerun()
@@ -406,6 +409,15 @@ with st.sidebar:
     # 이전 채팅 기록
     st.markdown("#### 📝 이전 대화")
     
+    # 디버깅 정보 (개발 중에만 표시)
+    if st.checkbox("🔍 디버그 정보", value=False):
+        st.write(f"현재 대화 메시지 수: {len(st.session_state.chat_history)}")
+        st.write(f"저장된 세션 수: {len(st.session_state.chat_sessions)}")
+        if st.session_state.chat_history:
+            st.write("현재 대화 미리보기:")
+            for i, (role, msg) in enumerate(st.session_state.chat_history[-2:]):
+                st.write(f"  {i}: {role} - {msg[:50]}...")
+    
     if st.session_state.chat_sessions:
         # 최근 5개 대화만 표시
         recent_sessions = st.session_state.chat_sessions[-5:]
@@ -421,6 +433,7 @@ with st.sidebar:
                            help=f"대화 시간: {session['timestamp']}"):
                     # 선택된 대화로 복원
                     st.session_state.chat_history = session['messages'].copy()
+                    st.success(f"✅ '{session['title']}' 대화를 불러왔습니다.")
                     st.rerun()
             
             with col2:
@@ -505,12 +518,26 @@ else:
 # 채팅 기록 표시
 if st.session_state.chat_history:
     st.markdown("### 💬 대화 기록")
-    for i, (role, message) in enumerate(st.session_state.chat_history):
-        if role == "user":
-            st.markdown(f"**사용자**: {message}")
-        else:
-            st.markdown(f"**어시스턴트**: {message}")
-        st.markdown("---")
+    
+    # 채팅 기록을 컨테이너로 감싸서 스크롤 가능하게 만들기
+    chat_container = st.container()
+    
+    with chat_container:
+        for i, (role, message) in enumerate(st.session_state.chat_history):
+            if role == "user":
+                st.markdown(f"""
+                <div style="background-color: #2b313e; padding: 10px; border-radius: 10px; margin: 10px 0; border-left: 3px solid #4CAF50;">
+                    <strong>👤 사용자:</strong><br>
+                    {message}
+                </div>
+                """, unsafe_allow_html=True)
+            else:
+                st.markdown(f"""
+                <div style="background-color: #1e1e1e; padding: 10px; border-radius: 10px; margin: 10px 0; border-left: 3px solid #2196F3;">
+                    <strong>🤖 어시스턴트:</strong><br>
+                    {message.replace('\n', '<br>')}
+                </div>
+                """, unsafe_allow_html=True)
 
 # 기능 카드들
 st.markdown("### 주요 기능")
