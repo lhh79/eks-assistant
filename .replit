@@ -16,3 +16,15 @@ deploymentTarget = "gce"
 [[ports]]
 localPort = 5000
 externalPort = 80
+
+[workflows]
+runButton = "Run"
+
+[[workflows.workflow]]
+name = "Run"
+author = 42944956
+mode = "sequential"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "streamlit run main.py --server.port=5000 --server.address=0.0.0.0 --server.enableCORS=false --server.enableWebsocketCompression=false"

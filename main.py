@@ -628,7 +628,7 @@ with st.form(key='chat_form', clear_on_submit=True):
     col1, col2, col3 = st.columns([8, 1, 1])
     
     with col1:
-        user_input = st.text_input("", 
+        user_input = st.text_input("질문 입력", 
                                   placeholder="AWS EKS 관련 질문이나 명령어를 입력해주세요... (엔터키로 전송)", 
                                   key="main_input",
                                   label_visibility="hidden")
