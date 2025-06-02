@@ -337,7 +337,7 @@ with st.sidebar:
             if first_user_message:
                 session_title = first_user_message[:30] + ("..." if len(first_user_message) > 30 else "")
             else:
-                session_title = f"대화 #{len(st.session_state.chat_sessions) + 1}"
+                session_title = f"대화 #{st.session_state.current_session_id + 1}"
             
             # 새 세션 객체 생성
             new_session = {
@@ -347,20 +347,19 @@ with st.sidebar:
                 'timestamp': datetime.now().strftime('%m/%d %H:%M')
             }
             
-            # 세션 목록에 추가
-            st.session_state.chat_sessions.append(new_session)
+            # 세션 목록에 추가 (최신 대화가 앞에 오도록)
+            st.session_state.chat_sessions.insert(0, new_session)
             st.session_state.current_session_id += 1
             
             # 현재 대화 초기화
             st.session_state.chat_history = []
             
             st.success(f"✅ 대화가 '{session_title}'로 저장되었습니다.")
-            time.sleep(1)  # 메시지 표시 시간
             st.rerun()
         else:
-            st.info("저장할 대화가 없습니다.")
+            # 대화가 없어도 새 대화 시작
             st.session_state.chat_history = []
-            st.rerun()
+            st.info("새 대화를 시작합니다.")
     
     st.markdown("---")
     
@@ -444,17 +443,20 @@ with st.sidebar:
     if len(st.session_state.chat_sessions) > 0:
         st.write(f"**총 {len(st.session_state.chat_sessions)}개의 저장된 대화**")
         
-        # 최근 10개 대화만 표시 (최신순)
-        recent_sessions = list(reversed(st.session_state.chat_sessions[-10:]))
+        # 최근 10개 대화만 표시 (이미 최신순으로 정렬됨)
+        recent_sessions = st.session_state.chat_sessions[:10]
         
-        for session in recent_sessions:
+        for i, session in enumerate(recent_sessions):
+            # 각 세션에 고유한 키 사용
+            session_key = f"session_{session['id']}_{i}"
+            
             col1, col2 = st.columns([4, 1])
             
             with col1:
-                # 버튼 텍스트에 시간 정보 포함
+                # 버튼 텍스트
                 button_text = f"💬 {session['title']}"
                 if st.button(button_text, 
-                           key=f"load_session_{session['id']}", 
+                           key=f"load_{session_key}", 
                            use_container_width=True,
                            help=f"시간: {session['timestamp']}, 메시지: {len(session['messages'])}개"):
                     # 선택된 대화로 복원
@@ -464,7 +466,7 @@ with st.sidebar:
             
             with col2:
                 if st.button("🗑️", 
-                           key=f"delete_session_{session['id']}", 
+                           key=f"delete_{session_key}", 
                            help="대화 삭제"):
                     # 해당 세션 삭제
                     st.session_state.chat_sessions = [s for s in st.session_state.chat_sessions if s['id'] != session['id']]
@@ -473,7 +475,12 @@ with st.sidebar:
             
             # 시간 정보 표시
             st.caption(f"📅 {session['timestamp']} | 💬 {len(session['messages'])}개 메시지")
-            st.markdown("---")
+            
+            # 마지막 항목이 아니면 구분선 추가
+            if i < len(recent_sessions) - 1:
+                st.markdown("---")
+        
+        st.markdown("---")
         
         # 모든 대화 삭제 버튼
         if st.button("🗑️ 모든 대화 삭제", 
@@ -485,7 +492,7 @@ with st.sidebar:
             st.rerun()
     else:
         st.info("💭 아직 저장된 대화가 없습니다.")
-        st.caption("새 대화를 시작하고 '➕ 새 대화 시작' 버튼을 눌러 저장하세요.")
+        st.caption("질문을 하고 '➕ 새 대화 시작' 버튼을 눌러 대화를 저장하세요.")
 
 # 메인 콘텐츠 영역
 st.markdown("""
