@@ -274,11 +274,18 @@ with st.sidebar:
                 model_options = [get_simple_model_name(model['modelId'], model['providerName']) for model in models]
                 model_ids = [model['modelId'] for model in models]
                 
+                # Claude 3.5 Sonnet을 기본값으로 찾기
+                default_index = 0
+                for i, model_id in enumerate(model_ids):
+                    if 'claude-3-5-sonnet' in model_id:
+                        default_index = i
+                        break
+                
                 selected_index = st.selectbox(
                     "사용할 모델 선택",
                     range(len(model_options)),
                     format_func=lambda x: model_options[x],
-                    index=0,
+                    index=default_index,
                     help="Bedrock에서 사용할 AI 모델을 선택하세요"
                 )
                 
