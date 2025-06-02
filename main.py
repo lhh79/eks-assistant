@@ -326,26 +326,41 @@ with st.sidebar:
     # 새 대화 시작 버튼
     if st.button("➕ 새 대화 시작", use_container_width=True):
         # 현재 대화가 있으면 저장
-        if st.session_state.chat_history:
-            session_title = f"대화 #{len(st.session_state.chat_sessions) + 1}"
-            first_user_message = next((msg for role, msg in st.session_state.chat_history if role == "user"), "")
+        if len(st.session_state.chat_history) > 0:
+            # 첫 번째 사용자 메시지를 제목으로 사용
+            first_user_message = ""
+            for role, msg in st.session_state.chat_history:
+                if role == "user":
+                    first_user_message = msg
+                    break
+            
             if first_user_message:
                 session_title = first_user_message[:30] + ("..." if len(first_user_message) > 30 else "")
+            else:
+                session_title = f"대화 #{len(st.session_state.chat_sessions) + 1}"
             
+            # 새 세션 객체 생성
             new_session = {
                 'id': st.session_state.current_session_id,
                 'title': session_title,
                 'messages': st.session_state.chat_history.copy(),
-                'timestamp': datetime.now().strftime('%H:%M')
+                'timestamp': datetime.now().strftime('%m/%d %H:%M')
             }
             
+            # 세션 목록에 추가
             st.session_state.chat_sessions.append(new_session)
             st.session_state.current_session_id += 1
             
-            st.success(f"✅ 현재 대화를 '{session_title}'로 저장했습니다.")
-        
-        st.session_state.chat_history = []
-        st.rerun()
+            # 현재 대화 초기화
+            st.session_state.chat_history = []
+            
+            st.success(f"✅ 대화가 '{session_title}'로 저장되었습니다.")
+            time.sleep(1)  # 메시지 표시 시간
+            st.rerun()
+        else:
+            st.info("저장할 대화가 없습니다.")
+            st.session_state.chat_history = []
+            st.rerun()
     
     st.markdown("---")
     
@@ -409,28 +424,39 @@ with st.sidebar:
     # 이전 채팅 기록
     st.markdown("#### 📝 이전 대화")
     
-    # 디버깅 정보 (개발 중에만 표시)
-    if st.checkbox("🔍 디버그 정보", value=False):
-        st.write(f"현재 대화 메시지 수: {len(st.session_state.chat_history)}")
-        st.write(f"저장된 세션 수: {len(st.session_state.chat_sessions)}")
+    # 디버깅 정보
+    with st.expander("🔍 디버그 정보", expanded=False):
+        st.write(f"**현재 대화 메시지 수:** {len(st.session_state.chat_history)}")
+        st.write(f"**저장된 세션 수:** {len(st.session_state.chat_sessions)}")
+        st.write(f"**세션 ID 카운터:** {st.session_state.current_session_id}")
+        
         if st.session_state.chat_history:
-            st.write("현재 대화 미리보기:")
-            for i, (role, msg) in enumerate(st.session_state.chat_history[-2:]):
+            st.write("**현재 대화 미리보기:**")
+            for i, (role, msg) in enumerate(st.session_state.chat_history[-3:]):
                 st.write(f"  {i}: {role} - {msg[:50]}...")
+        
+        if st.session_state.chat_sessions:
+            st.write("**저장된 세션 목록:**")
+            for session in st.session_state.chat_sessions:
+                st.write(f"  ID: {session['id']}, 제목: {session['title']}, 메시지 수: {len(session['messages'])}")
     
-    if st.session_state.chat_sessions:
-        # 최근 5개 대화만 표시
-        recent_sessions = st.session_state.chat_sessions[-5:]
-        recent_sessions.reverse()  # 최신순으로 정렬
+    # 저장된 대화 표시
+    if len(st.session_state.chat_sessions) > 0:
+        st.write(f"**총 {len(st.session_state.chat_sessions)}개의 저장된 대화**")
+        
+        # 최근 10개 대화만 표시 (최신순)
+        recent_sessions = list(reversed(st.session_state.chat_sessions[-10:]))
         
         for session in recent_sessions:
             col1, col2 = st.columns([4, 1])
             
             with col1:
-                if st.button(f"💬 {session['title']}", 
-                           key=f"session_{session['id']}", 
+                # 버튼 텍스트에 시간 정보 포함
+                button_text = f"💬 {session['title']}"
+                if st.button(button_text, 
+                           key=f"load_session_{session['id']}", 
                            use_container_width=True,
-                           help=f"대화 시간: {session['timestamp']}"):
+                           help=f"시간: {session['timestamp']}, 메시지: {len(session['messages'])}개"):
                     # 선택된 대화로 복원
                     st.session_state.chat_history = session['messages'].copy()
                     st.success(f"✅ '{session['title']}' 대화를 불러왔습니다.")
@@ -438,19 +464,28 @@ with st.sidebar:
             
             with col2:
                 if st.button("🗑️", 
-                           key=f"delete_{session['id']}", 
+                           key=f"delete_session_{session['id']}", 
                            help="대화 삭제"):
+                    # 해당 세션 삭제
                     st.session_state.chat_sessions = [s for s in st.session_state.chat_sessions if s['id'] != session['id']]
+                    st.success("대화가 삭제되었습니다.")
                     st.rerun()
-        
-        st.markdown("---")
+            
+            # 시간 정보 표시
+            st.caption(f"📅 {session['timestamp']} | 💬 {len(session['messages'])}개 메시지")
+            st.markdown("---")
         
         # 모든 대화 삭제 버튼
-        if st.button("🗑️ 모든 대화 삭제", use_container_width=True):
+        if st.button("🗑️ 모든 대화 삭제", 
+                    use_container_width=True, 
+                    type="secondary"):
             st.session_state.chat_sessions = []
+            st.session_state.current_session_id = 0
+            st.success("모든 대화가 삭제되었습니다.")
             st.rerun()
     else:
-        st.info("저장된 대화가 없습니다.")
+        st.info("💭 아직 저장된 대화가 없습니다.")
+        st.caption("새 대화를 시작하고 '➕ 새 대화 시작' 버튼을 눌러 저장하세요.")
 
 # 메인 콘텐츠 영역
 st.markdown("""
