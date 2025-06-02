@@ -130,19 +130,60 @@ with st.sidebar:
     
     st.markdown("---")
     
-    # 메뉴 항목들
-    menu_items = [
-        ("📊", "클러스터 현황 조회"),
-        ("🔧", "kubectl 명령어 가이드"),
-        ("⭐", "Bedrock 모델 목록"),
-        ("⚙️", "EKS 보안 설정"),
-        ("💾", "XXX 연결 설정")
-    ]
+    # kubectl 명령어 가이드
+    st.markdown("#### 🔧 kubectl 명령어 가이드")
     
-    selected_menu = None
-    for icon, label in menu_items:
-        if st.button(f"{icon} {label}", use_container_width=True):
-            selected_menu = label
+    # Pod 관련 명령어
+    with st.expander("📦 Pod 관리", expanded=False):
+        st.code("kubectl get pods", language="bash")
+        st.code("kubectl get pods -o wide", language="bash")
+        st.code("kubectl describe pod <pod-name>", language="bash")
+        st.code("kubectl logs <pod-name>", language="bash")
+        st.code("kubectl exec -it <pod-name> -- /bin/bash", language="bash")
+        st.code("kubectl delete pod <pod-name>", language="bash")
+    
+    # Deployment 관련 명령어
+    with st.expander("🚀 Deployment 관리", expanded=False):
+        st.code("kubectl get deployments", language="bash")
+        st.code("kubectl describe deployment <deployment-name>", language="bash")
+        st.code("kubectl scale deployment <deployment-name> --replicas=3", language="bash")
+        st.code("kubectl rollout status deployment/<deployment-name>", language="bash")
+        st.code("kubectl rollout restart deployment/<deployment-name>", language="bash")
+        st.code("kubectl rollout undo deployment/<deployment-name>", language="bash")
+    
+    # Service 관련 명령어
+    with st.expander("🌐 Service 관리", expanded=False):
+        st.code("kubectl get services", language="bash")
+        st.code("kubectl get svc", language="bash")
+        st.code("kubectl describe service <service-name>", language="bash")
+        st.code("kubectl port-forward service/<service-name> 8080:80", language="bash")
+        st.code("kubectl expose deployment <deployment-name> --port=80 --type=LoadBalancer", language="bash")
+    
+    # 클러스터 정보 명령어
+    with st.expander("📊 클러스터 정보", expanded=False):
+        st.code("kubectl cluster-info", language="bash")
+        st.code("kubectl get nodes", language="bash")
+        st.code("kubectl get nodes -o wide", language="bash")
+        st.code("kubectl top nodes", language="bash")
+        st.code("kubectl top pods", language="bash")
+        st.code("kubectl get namespaces", language="bash")
+    
+    # ConfigMap & Secret 명령어
+    with st.expander("🔐 ConfigMap & Secret", expanded=False):
+        st.code("kubectl get configmaps", language="bash")
+        st.code("kubectl get secrets", language="bash")
+        st.code("kubectl describe configmap <configmap-name>", language="bash")
+        st.code("kubectl describe secret <secret-name>", language="bash")
+        st.code("kubectl create secret generic <secret-name> --from-literal=key=value", language="bash")
+    
+    # 리소스 관리 명령어
+    with st.expander("📋 리소스 관리", expanded=False):
+        st.code("kubectl get all", language="bash")
+        st.code("kubectl get all -n <namespace>", language="bash")
+        st.code("kubectl apply -f <file.yaml>", language="bash")
+        st.code("kubectl delete -f <file.yaml>", language="bash")
+        st.code("kubectl edit deployment <deployment-name>", language="bash")
+        st.code("kubectl patch deployment <deployment-name> -p '{\"spec\":{\"replicas\":5}}'", language="bash")
     
     st.markdown("---")
     st.markdown("**최근 (4개)**")
